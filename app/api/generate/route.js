@@ -2,12 +2,34 @@
 // It keeps your Anthropic API key secret
 // The browser calls this route, this route calls Claude, and sends back the result
 
+import { readFileSync, writeFileSync } from 'fs'
+import { join } from 'path'
+
 export const maxDuration = 60
+
+function getCacheKey(topics) {
+  const date = new Date().toISOString().slice(0, 10) // "2025-04-07"
+  const normalized = topics.trim().toLowerCase().split(',').map(t => t.trim()).sort().join(',')
+  return join('/tmp', `daily-byte-${date}-${normalized.replace(/[^a-z0-9,]/g, '_')}.json`)
+}
+
+function readCache(path) {
+  try {
+    return JSON.parse(readFileSync(path, 'utf8'))
+  } catch {
+    return null
+  }
+}
 
 export async function POST(request) {
   try {
     // Read what the user selected from the request
     const { topics } = await request.json()
+
+    // Check cache — return today's result if it exists
+    const cachePath = getCacheKey(topics)
+    const cached = readCache(cachePath)
+    if (cached) return Response.json(cached)
 
     // This is the prompt that tells Claude HOW to write the content
     const SYSTEM_PROMPT = `You are writing a gossip-style AI & tech newsletter. Think: a group chat where your smartest friend drops the hottest tech takes. NOT a newsletter. NOT educational. Just the tea.
@@ -93,8 +115,9 @@ Respond ONLY in valid JSON. No markdown, no backticks:
     // Strip <cite ...>...</cite> tags injected by web search
     const stripped = jsonText.replace(/<cite[^>]*>(.*?)<\/cite>/gs, '$1')
 
-    // Parse and return the topics
+    // Parse and cache the result for the rest of the day
     const parsed = JSON.parse(stripped)
+    try { writeFileSync(cachePath, JSON.stringify(parsed)) } catch {}
     return Response.json(parsed)
 
   } catch (err) {
