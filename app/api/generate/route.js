@@ -2,6 +2,8 @@
 // It keeps your Anthropic API key secret
 // The browser calls this route, this route calls Claude, and sends back the result
 
+export const maxDuration = 60
+
 export async function POST(request) {
   try {
     // Read what the user selected from the request
@@ -88,8 +90,11 @@ Respond ONLY in valid JSON. No markdown, no backticks:
       return Response.json({ error: 'Could not generate content' }, { status: 500 })
     }
 
+    // Strip <cite ...>...</cite> tags injected by web search
+    const stripped = jsonText.replace(/<cite[^>]*>(.*?)<\/cite>/gs, '$1')
+
     // Parse and return the topics
-    const parsed = JSON.parse(jsonText)
+    const parsed = JSON.parse(stripped)
     return Response.json(parsed)
 
   } catch (err) {
